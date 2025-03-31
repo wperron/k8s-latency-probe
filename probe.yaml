@@ -1,0 +1,74 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prober
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prober
+rules:
+  - apiGroups:
+      - ''
+    resources:
+      - namespaces
+      - namespaces/status
+      - nodes
+      - nodes/spec
+      - pods
+      - pods/status
+      - services
+    verbs:
+      - create
+      - get
+      - list
+      - watch
+      - update
+      - patch
+      - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prober
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prober
+subjects:
+  - kind: ServiceAccount
+    name: prober
+    namespace: default
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: prober-cron
+  namespace: default
+spec:
+  schedule: '* * * * *'
+  startingDeadlineSeconds: 30
+  successfulJobsHistoryLimit: 3
+  concurrencyPolicy: Forbid
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    metadata:
+      name: prober
+    spec:
+      activeDeadlineSeconds: 299
+      template:
+        metadata:
+          name: prober
+          labels:
+            name: prober
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: prober
+          containers:
+          - name: prober
+            image: ghcr.io/wperron/prober:latest
+            resources:
+              limits:
+                memory: "128Mi"
+                cpu: "500m"
