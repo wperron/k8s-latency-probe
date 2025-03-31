@@ -8,3 +8,4 @@ WORKDIR /probe
 COPY --from=builder /app/bin/probe /usr/local/bin/probe
 RUN apt update -y; apt install -y ca-certificates ; apt-get clean
 ENTRYPOINT ["/usr/local/bin/probe"]
+LABEL org.opencontainers.image.source="https://github.com/wperron/k8s-latency-probe"
