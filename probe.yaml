@@ -49,7 +49,7 @@ metadata:
 spec:
   schedule: '* * * * *'
   startingDeadlineSeconds: 30
-  successfulJobsHistoryLimit: 3
+  successfulJobsHistoryLimit: 1
   concurrencyPolicy: Forbid
   failedJobsHistoryLimit: 1
   jobTemplate:
@@ -67,8 +67,8 @@ spec:
           serviceAccountName: prober
           containers:
           - name: prober
-            image: ghcr.io/wperron/prober:latest
+            image: ghcr.io/wperron/k8s-latency-probe:main
             resources:
-              limits:
+              requests:
                 memory: "128Mi"
                 cpu: "500m"
