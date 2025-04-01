@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -46,6 +47,8 @@ func main() {
 	// creates the clientset
 	clientset := must(kubernetes.NewForConfig(config))
 
+	namespace := must(currentNamespace())
+
 	buf := make([]byte, 8)
 	_ = must(rand.Read(buf))
 	instance := hex.EncodeToString(buf)
@@ -56,7 +59,7 @@ func main() {
 		attribute.String("instance", instance),
 	)
 
-	pod := must(clientset.CoreV1().Pods("default").Create(ctx, &corev1.Pod{
+	pod := must(clientset.CoreV1().Pods(namespace).Create(ctx, &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: fmt.Sprintf("probe-%s", instance),
 			Labels: map[string]string{
@@ -88,7 +91,7 @@ func main() {
 		for {
 			// get pods in all the namespaces by omitting namespace
 			// Or specify namespace to get pods in particular namespace
-			pods, err := clientset.CoreV1().Pods("default").List(ctx, metav1.ListOptions{
+			pods, err := clientset.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
 				LabelSelector: fmt.Sprintf("probe-instance=%s", instance),
 			})
 			if err != nil {
@@ -114,7 +117,7 @@ func main() {
 
 	// Update the pod's labels
 	_, updatePodSpan := tracer.Start(ctx, "prober.update-pod")
-	_ = must(clientset.CoreV1().Pods("default").Patch(
+	_ = must(clientset.CoreV1().Pods(namespace).Patch(
 		ctx,
 		pod.Name,
 		types.MergePatchType,
@@ -133,7 +136,7 @@ func main() {
 
 	_, cleanupSpan := tracer.Start(ctx, "prober.cleanup")
 
-	err := clientset.CoreV1().Pods("default").Delete(ctx, pod.Name, metav1.DeleteOptions{})
+	err := clientset.CoreV1().Pods(namespace).Delete(ctx, pod.Name, metav1.DeleteOptions{})
 	if err != nil {
 		panic(err.Error())
 	}
@@ -146,6 +149,23 @@ func must[V any](v V, e error) V {
 		panic(e)
 	}
 	return v
+}
+
+// currentNamespace returns the namespace of the current pod.
+func currentNamespace() (string, error) {
+	// Get the namespace from the environment variable
+	ns := os.Getenv("K8S_NAMESPACE_NAME")
+	if ns != "" {
+		return ns, nil
+	}
+
+	// If the environment variable is not set, read the namespace from the file
+	data, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+	if err != nil {
+		return "", fmt.Errorf("failed to read namespace: %w", err)
+	}
+
+	return string(data), nil
 }
 
 // initOpenTelemetry initializes the OTLP exporter and tracer provider.
